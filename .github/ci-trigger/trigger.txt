@@ -1,0 +1,4 @@
+Triggering CI build
+
+This file is committed to flutter-starter-nyakuru to trigger the GitHub Actions build_apk workflow.
+Timestamp: 2026-07-23T21:25:00Z
