@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +14,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:device_apps/device_apps.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:encrypt/encrypt.dart' as encrypt_pkg;
+import 'package:audioplayers/audioplayers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +41,13 @@ class _NyakuruAppState extends State<NyakuruApp> {
   late StreamSubscription<ConnectivityResult> _connectivitySub;
 
   static const EventChannel _notificationChannel = EventChannel('nyakuru/notifications');
+  static const EventChannel _theftChannel = EventChannel('nyakuru/theft');
+  static const MethodChannel _backgroundChannel = MethodChannel('nyakuru/background');
+
+  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  encrypt_pkg.Encrypter? _encrypter;
+  encrypt_pkg.Key? _encKey;
+  final AudioPlayer _player = AudioPlayer();
 
   @override
   void initState() {
@@ -46,6 +58,96 @@ class _NyakuruAppState extends State<NyakuruApp> {
     _initConnectivity();
     _loadDeviceInfo();
     _startNotificationListener();
+    _startTheftListener();
+    _ensureKey();
+  }
+
+  Future<void> _ensureKey() async {
+    final existing = await _secureStorage.read(key: 'enc_key');
+    if (existing != null) {
+      _encKey = encrypt_pkg.Key.fromBase64(existing);
+    } else {
+      final rnd = Random.secure();
+      final bytes = List<int>.generate(32, (_) => rnd.nextInt(256));
+      final keyB64 = base64Encode(bytes);
+      await _secureStorage.write(key: 'enc_key', value: keyB64);
+      _encKey = encrypt_pkg.Key.fromBase64(keyB64);
+    }
+    _encrypter = encrypt_pkg.Encrypter(encrypt_pkg.AES(_encKey!, mode: encrypt_pkg.AESMode.cbc));
+  }
+
+  Future<String> _encryptFile(String path) async {
+    try {
+      final file = File(path);
+      final bytes = await file.readAsBytes();
+      final iv = encrypt_pkg.IV.fromSecureRandom(16);
+      final encrypted = _encrypter!.encryptBytes(bytes, iv: iv);
+      final outPath = '$path.enc';
+      final outFile = File(outPath);
+      await outFile.writeAsBytes(iv.bytes + encrypted.bytes);
+      // delete original file
+      try { await file.delete(); } catch (e) {}
+      return outPath;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  Future<String> _decryptToTemp(String encPath) async {
+    try {
+      final encFile = File(encPath);
+      final all = await encFile.readAsBytes();
+      final ivBytes = all.sublist(0, 16);
+      final cipher = all.sublist(16);
+      final iv = encrypt_pkg.IV(ivBytes);
+      final decrypted = _encrypter!.decryptBytes(encrypt_pkg.Encrypted(cipher), iv: iv);
+      final tmp = await Directory.systemTemp.createTemp('nyakuru');
+      final out = File('${tmp.path}/${encFile.uri.pathSegments.last.replaceAll('.enc', '')}');
+      await out.writeAsBytes(decrypted);
+      return out.path;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  Future<void> _playEncryptedAudio(String encPath) async {
+    final tmp = await _decryptToTemp(encPath);
+    if (tmp.isNotEmpty) {
+      await _player.stop();
+      await _player.play(DeviceFileSource(tmp));
+    }
+  }
+
+  void _startTheftListener() {
+    _theftChannel.receiveBroadcastStream().listen((event) async {
+      try {
+        final Map m = Map.from(event as Map);
+        if (m.containsKey('audio_path')) {
+          final rawPath = m['audio_path'] as String;
+          final enc = await _encryptFile(rawPath);
+          final alert = {
+            'type': 'theft',
+            'reason': m['reason'] ?? 'unknown',
+            'ts': DateTime.now().toIso8601String(),
+            'audio_enc_path': enc,
+          };
+          alertsBox.add(alert);
+          _loadAlerts();
+          _showNotification('Theft alert', 'Movement detected — evidence saved');
+        } else if (m.containsKey('ts')) {
+          final alert = {
+            'type': 'theft',
+            'reason': m['reason'] ?? 'unknown',
+            'ts': DateTime.fromMillisecondsSinceEpoch((m['ts'] as int)).toIso8601String(),
+          };
+          alertsBox.add(alert);
+          _loadAlerts();
+          _showNotification('Theft alert', 'Movement detected');
+        }
+      } catch (e) {
+        // ignore
+      }
+    });
   }
 
   Future<void> _initNotifications() async {
@@ -63,7 +165,6 @@ class _NyakuruAppState extends State<NyakuruApp> {
         final Map m = Map.from(event as Map);
         final pkg = m['package'] ?? 'unknown';
         final title = m['title'] ?? '';
-        final text = m['text'] ?? '';
         final alert = {
           'type': 'notification',
           'package': pkg,
@@ -218,6 +319,7 @@ class _NyakuruAppState extends State<NyakuruApp> {
   @override
   void dispose() {
     _connectivitySub.cancel();
+    _player.dispose();
     super.dispose();
   }
 
@@ -230,7 +332,10 @@ class _NyakuruAppState extends State<NyakuruApp> {
         return ListTile(
           title: Text(a['title'] ?? a['name'] ?? a['type'] ?? 'Event'),
           subtitle: Text(a['message'] ?? '${a['package'] ?? ''} ${a['rssi'] != null ? 'RSSI:${a['rssi']}' : ''}'),
-          trailing: Text(a['ts']?.toString()?.split('T')?.first ?? ''),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (a['audio_enc_path'] != null) IconButton(icon: Icon(Icons.play_arrow), onPressed: () async { await _playEncryptedAudio(a['audio_enc_path']); }),
+            Text(a['ts']?.toString()?.split('T')?.first ?? ''),
+          ],),
         );
       },
     );

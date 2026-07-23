@@ -12,6 +12,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity: FlutterActivity() {
     private val NOTIF_ACTION = "com.nyakuru.notification.POSTED"
     private val THEFT_ACTION = "com.nyakuru.theft.TRIGGERED"
+    private val AUDIO_READY_ACTION = "com.nyakuru.theft.AUDIO_READY"
     private var notifEventSink: EventChannel.EventSink? = null
     private var theftEventSink: EventChannel.EventSink? = null
 
@@ -34,15 +35,25 @@ class MainActivity: FlutterActivity() {
     private val theftReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent == null) return
-            val ts = intent.getLongExtra("ts", 0L)
-            val reason = intent.getStringExtra("reason") ?: ""
-            val value = intent.getFloatExtra("value", 0f)
-            val map: MutableMap<String, Any> = HashMap()
-            map["ts"] = ts
-            map["reason"] = reason
-            map["value"] = value
-            runOnUiThread {
-                theftEventSink?.success(map)
+            val action = intent.action
+            if (action == THEFT_ACTION) {
+                val ts = intent.getLongExtra("ts", 0L)
+                val reason = intent.getStringExtra("reason") ?: ""
+                val value = intent.getFloatExtra("value", 0f)
+                val map: MutableMap<String, Any> = HashMap()
+                map["ts"] = ts
+                map["reason"] = reason
+                map["value"] = value
+                runOnUiThread {
+                    theftEventSink?.success(map)
+                }
+            } else if (action == AUDIO_READY_ACTION) {
+                val path = intent.getStringExtra("path") ?: ""
+                val map: MutableMap<String, String> = HashMap()
+                map["audio_path"] = path
+                runOnUiThread {
+                    theftEventSink?.success(map)
+                }
             }
         }
     }
@@ -63,11 +74,15 @@ class MainActivity: FlutterActivity() {
             }
         )
 
+        val theftFilter = IntentFilter()
+        theftFilter.addAction(THEFT_ACTION)
+        theftFilter.addAction(AUDIO_READY_ACTION)
+
         EventChannel(flutterEngine?.dartExecutor?.binaryMessenger, "nyakuru/theft").setStreamHandler(
             object: EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                     theftEventSink = events
-                    registerReceiver(theftReceiver, IntentFilter(THEFT_ACTION))
+                    registerReceiver(theftReceiver, theftFilter)
                 }
 
                 override fun onCancel(arguments: Any?) {
