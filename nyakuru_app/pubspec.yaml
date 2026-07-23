@@ -1,0 +1,34 @@
+name: nyakuru_app
+description: Offline-capable Flutter starter app for device security monitoring
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=2.18.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  connectivity_plus: ^4.0.0
+  device_info_plus: ^10.0.0
+  permission_handler: ^10.0.0
+  flutter_local_notifications: ^12.0.0
+  path_provider: ^2.0.0
+  flutter_blue_plus: ^2.0.0
+  geolocator: ^10.0.0
+  url_launcher: ^6.1.7
+  device_apps: ^3.2.2
+  sensors_plus: ^2.1.0
+  local_auth: ^2.1.0
+  wakelock: ^0.6.2
+  flutter_secure_storage: ^8.0.0
+  encrypt: ^5.0.1
+  audioplayers: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/sample_data.json
+    - assets/alarm.mp3
