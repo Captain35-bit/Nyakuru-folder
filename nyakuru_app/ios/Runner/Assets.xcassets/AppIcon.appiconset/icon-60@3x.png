@@ -1,0 +1,1 @@
+PNG placeholder for iOS AppIcon 2x/3x (multiple sizes).\nFilename: icon-60@3x.png (placeholders for all AppIcon entries).\nAction: Replace these placeholder files in ios/Runner/Assets.xcassets/AppIcon.appiconset/ with actual PNGs at the sizes required by Xcode's AppIcon set.
