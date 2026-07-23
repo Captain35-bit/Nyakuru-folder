@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <application
         android:label="nyakuru_app"
@@ -21,6 +24,18 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- BLE scan foreground service -->
+        <service
+            android:name="com.example.nyakuru_app.BleScanService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- Theft monitor foreground service -->
+        <service
+            android:name="com.example.nyakuru_app.TheftMonitorService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback|location" />
 
     </application>
 </manifest>

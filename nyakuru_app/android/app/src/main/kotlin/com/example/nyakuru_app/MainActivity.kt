@@ -7,11 +7,15 @@ import android.content.IntentFilter
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
     private val NOTIF_ACTION = "com.nyakuru.notification.POSTED"
-    private var eventSink: EventChannel.EventSink? = null
-    private val receiver = object : BroadcastReceiver() {
+    private val THEFT_ACTION = "com.nyakuru.theft.TRIGGERED"
+    private var notifEventSink: EventChannel.EventSink? = null
+    private var theftEventSink: EventChannel.EventSink? = null
+
+    private val notifReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent == null) return
             val pkg = intent.getStringExtra("package") ?: ""
@@ -22,7 +26,23 @@ class MainActivity: FlutterActivity() {
             map["title"] = title
             map["text"] = text
             runOnUiThread {
-                eventSink?.success(map)
+                notifEventSink?.success(map)
+            }
+        }
+    }
+
+    private val theftReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent == null) return
+            val ts = intent.getLongExtra("ts", 0L)
+            val reason = intent.getStringExtra("reason") ?: ""
+            val value = intent.getFloatExtra("value", 0f)
+            val map: MutableMap<String, Any> = HashMap()
+            map["ts"] = ts
+            map["reason"] = reason
+            map["value"] = value
+            runOnUiThread {
+                theftEventSink?.success(map)
             }
         }
     }
@@ -32,18 +52,63 @@ class MainActivity: FlutterActivity() {
         EventChannel(flutterEngine?.dartExecutor?.binaryMessenger, "nyakuru/notifications").setStreamHandler(
             object: EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-                    eventSink = events
-                    registerReceiver(receiver, IntentFilter(NOTIF_ACTION))
+                    notifEventSink = events
+                    registerReceiver(notifReceiver, IntentFilter(NOTIF_ACTION))
                 }
 
                 override fun onCancel(arguments: Any?) {
-                    try {
-                        unregisterReceiver(receiver)
-                    } catch (e: Exception) {
-                    }
-                    eventSink = null
+                    try { unregisterReceiver(notifReceiver) } catch (e: Exception) {}
+                    notifEventSink = null
                 }
             }
         )
+
+        EventChannel(flutterEngine?.dartExecutor?.binaryMessenger, "nyakuru/theft").setStreamHandler(
+            object: EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    theftEventSink = events
+                    registerReceiver(theftReceiver, IntentFilter(THEFT_ACTION))
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    try { unregisterReceiver(theftReceiver) } catch (e: Exception) {}
+                    theftEventSink = null
+                }
+            }
+        )
+
+        MethodChannel(flutterEngine?.dartExecutor?.binaryMessenger, "nyakuru/background").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startBackgroundScan" -> {
+                    val intent = Intent(this, BleScanService::class.java)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        startForegroundService(intent)
+                    } else {
+                        startService(intent)
+                    }
+                    result.success(true)
+                }
+                "stopBackgroundScan" -> {
+                    val intent = Intent(this, BleScanService::class.java)
+                    stopService(intent)
+                    result.success(true)
+                }
+                "startTheftMonitor" -> {
+                    val intent = Intent(this, TheftMonitorService::class.java)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        startForegroundService(intent)
+                    } else {
+                        startService(intent)
+                    }
+                    result.success(true)
+                }
+                "stopTheftMonitor" -> {
+                    val intent = Intent(this, TheftMonitorService::class.java)
+                    stopService(intent)
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 }
