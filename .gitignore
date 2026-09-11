@@ -1,0 +1,57 @@
+# Android build files
+*.apk
+*.ap_
+*.dex
+*.class
+build/
+.gradle
+*.gradle
+
+# Keystore files (NEVER commit these!)
+*.jks
+*.keystore
+*.key
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.settings
+
+# Node modules
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+
+# App-specific
+the-book/node_modules/
+the-book/android/build/
+the-book/android/.gradle/
+the-book/android/app/build/
+the-book/android/local.properties
+
+# Build outputs
+*.aab
+release/
+dist/
